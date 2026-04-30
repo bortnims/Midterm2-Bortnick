@@ -1,0 +1,363 @@
+---
+title: "Midterm #2 - Bortnick"
+author: "Marco Bortnick"
+date: "2026-04-23"
+output: html_document
+---
+
+```{r, message = F}
+library(tidyverse)
+library(maps)
+library(purrr)
+library(ggthemes)
+library(patchwork)
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(ggwordcloud)
+```
+
+## Part 1
+
+```{r, message = F}
+re_elec_perCapita <- read_csv("https://ourworldindata.org/grapher/renewable-electricity-per-capita.csv")
+
+primary_perCapita <- read_csv("https://ourworldindata.org/grapher/per-capita-energy-use.csv")
+
+re_energy_percent <- read_csv("https://ourworldindata.org/grapher/share-electricity-renewables.csv")
+
+world_map <- map_data("world") 
+```
+
+```{r data_cleaning}
+re_elec_perCapita_grouped <- re_elec_perCapita %>%
+  group_by(Entity) %>%
+  slice_max(Year, n =1) %>%
+  filter(Entity%in%c("Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay",  "Venezuela")) %>%
+  drop_na(`Renewable electricity per capita`)
+
+
+primary_perCapita_grouped <- primary_perCapita %>%
+  group_by(Entity) %>%
+  filter(Entity %in% c("Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay",  "Venezuela")) %>%
+  slice_max(Year,n= 1) %>%
+  drop_na(`Per capita energy consumption`)
+```
+
+
+```{r map_building}
+map_re_elec_data <- world_map %>%
+  left_join(re_elec_perCapita_grouped, by = c("region" = "Entity")) %>%
+  filter(region%in%c("Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay",  "Venezuela"))
+map_primary_perCapita <- world_map %>%
+  left_join(primary_perCapita_grouped, by = c("region"="Entity")) %>%
+  filter(region%in%c("Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay",  "Venezuela"))
+
+
+```
+
+
+```{r}
+renewable_electricity_map <- ggplot(map_re_elec_data, aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill = `Renewable electricity per capita`), color = "black", alpha = 1)  +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  annotate(geom = "point", x = -60.56694, y = -21.98867, color = "red3", size = 1.5) +
+  coord_quickmap() +
+  theme_map() +
+  labs(title = "South American Renewable Electricity\nGeneration Per Capita" ,fill = "kWh per person per year", subtitle = "Highest Concentration in Paraguay (red dot)", caption = "Source: https://ourworldindata.org/grapher/renewable-electricity-per-capita.csv") +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")) 
+renewable_electricity_map
+```
+
+```{r}
+primary_energy_map <- ggplot(data = map_primary_perCapita, aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill = `Per capita energy consumption`), color = "black", alpha = 1)  +
+  scale_fill_gradient(low = "lightblue", high = "navy") +
+  annotate(geom = "point", x = -65.48643, y = 5.6436524, color = "red3", size = 1.5) +
+  annotate(geom = "point", x = -72.68652, y = -37.42686, color = "red3", size = 1.5) +
+  coord_quickmap() +
+  theme_map() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")) +
+  labs(title = "South American Primary \nEnergy Use Per Capita", fill = "kWh per person per year", subtitle = "Highest Concentration in Venezuela and Chile (red dots)", caption = "Source: https://ourworldindata.org/grapher/per-capita-energy-use.csv")
+primary_energy_map
+```
+
+```{r}
+re_elec_perCapita_selected <- re_elec_perCapita %>%
+  group_by(Entity) %>% 
+  filter(Entity%in%c("Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay",  "Venezuela")) %>%
+  drop_na(`Renewable electricity per capita`) 
+```
+
+
+
+
+```{r time_series}
+time_series_plot <- ggplot(re_elec_perCapita_selected, aes(x = Year, y = `Renewable electricity per capita`, color = Entity)) +
+  geom_line() +
+  theme_minimal() +
+  annotate(geom = "text", x = 2000, y = 8100, label = "Highest Energy\nGenration Ovewrall", color = "pink") +
+  labs(title = "Generated Renewable Electricity\nin South America Overtime", x = "Year", y = "Renewable Electricity Generated", color = "Country", caption = "Source: https://ourworldindata.org/grapher/renewable-electricity-per-capita.csv", subtitle = "Per Capita") +
+  theme(legend.position = "right",
+        plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")) +
+  scale_color_manual(values = c(
+  "Argentina" = "red",
+  "Bolivia" = "red4",
+  "Brazil" = "yellow2",
+  "Chile" = "green3",
+  "Colombia" = "blue2",
+  "Ecuador" = "purple",
+  "Guyana" = "purple4",
+  "Paraguay" = "pink",
+  "Peru" = "lightblue",
+  "Suriname" = "darkgreen",
+  "Uruguay" = "orange",
+  "Venezuela" = "pink4"
+))
+time_series_plot
+```
+
+```{r}
+scatterplot_df <- re_elec_perCapita_grouped %>%
+  left_join(primary_perCapita_grouped, by = c("Entity"="Entity"))
+```
+
+
+```{r scatterplot}
+scatter_plot <- ggplot(data = scatterplot_df,aes(x = `Renewable electricity per capita`, y = `Per capita energy consumption`, color = Entity)) +
+  geom_point() +
+  theme_minimal() +
+  annotate(geom = "text", x= 1300, y = 26010, size = 3, label = "Country with highest\n energy consumption", color = "green3", fontface = "bold") +
+  annotate(geom = "text", x= 3400, y = 12300, size = 3, label = "Country with highest\n Renew. Elec. Generation", color = "orange", fontface = "bold") +
+  labs(title = "South American Energy Consumption\nby Reneable Electricty", x = "Renewable Electricity Generated", y = "Energy Consumption", color = "Country", subtitle = " Per Capita", caption = "Source: https://ourworldindata.org/grapher/renewable-electricity-per-capita.csv,\nhttps://ourworldindata.org/grapher/per-capita-energy-use.csv ") +
+  theme(legend.position = "right",
+        plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")) +
+  scale_color_manual(values = c(
+  "Argentina" = "red",
+  "Bolivia" = "red4",
+  "Brazil" = "yellow2",
+  "Chile" = "green3",
+  "Colombia" = "blue2",
+  "Ecuador" = "purple",
+  "Guyana" = "purple4",
+  "Paraguay" = "pink",
+  "Peru" = "lightblue",
+  "Suriname" = "darkgreen",
+  "Uruguay" = "orange",
+  "Venezuela" = "pink4"
+))
+scatter_plot
+```
+
+```{r}
+un_perm_council_renewable <- re_energy_percent %>%
+  group_by(Entity) %>%
+  filter(Entity%in%c("China", "France", "Russia", "United Kingdom", "United States"))
+
+unsc_renewable_share_plot <- ggplot(un_perm_council_renewable, aes(x = Year, y = Renewables, color = Entity)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Share of Renewable Electricity Over Time\nLeading Countries", subtitle = "Permanent United Nations Security Council members", x = "Year", y = "Renewable electricity share (%)", color = "Country", caption = "Source: https://ourworldindata.org/grapher/share-electricity-renewables.csv") +
+  annotate(geom = "text", x = 2002, y = 50, label = "Highest Growing Renewables", color = "lightblue", fontface = "bold") + 
+  theme(legend.position = "right",
+        plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"))
+
+unsc_renewable_share_plot
+  
+```
+
+
+```{r,fig.width=15,fig.height=15}
+my_dashboard1 <- (primary_energy_map + renewable_electricity_map) / (time_series_plot + scatter_plot + unsc_renewable_share_plot ) +
+  plot_annotation(title = "Energy Patterns in South America Alongside Leading Countries", theme = theme(plot.title = element_text(face = "bold")))
+my_dashboard1
+ggsave('my_dashboard1.png', width = 50, height = 50, units = 'cm')
+```
+
+## Intepretation
+South America shows a clear pattern where renewable electricity generation is relatively strong overall, but it is not evenly distributed across countries. Paraguay stands out the most, generating a very high amount of renewable electricity per capita, likely driven by its heavy use of hydropower. At the same time, countries like Venezuela and Chile appear to have higher overall energy consumption per person. So overall there doesn't appear to be a major relationship between renewable energy generation and energy consumption  Over time, most countries in the region have increased their renewable electricity generation, although the growth rates differ, with some countries rising steadily while others are more flat showing no growth. Note, some countries only have data from 2000 and onward. The scatterplot also highlights that countries with higher energy consumption do not alwyas have high renewable energy generation. Overall, the region shows strong advancements in renewable energy, but concentrated in a few countries, and the relationship between energy use and renewable production is not identifiable.
+
+## Part 2
+
+```{r, message = F}
+taylor_lyrics <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2020/2020-09-29/taylor_swift_lyrics.csv")
+glimpse(taylor_lyrics)
+
+charts_data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2020/2020-09-29/charts.csv")
+glimpse(charts_data)
+
+sales_data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2020/2020-09-29/sales.csv")
+glimpse(sales_data)
+```
+
+```{r, message = F}
+taylor_df_lover <- taylor_lyrics %>%
+  filter(Album %in% "Lover")
+taylor_df_red <- taylor_lyrics %>%
+  filter(Album %in% "Red")
+
+stopwords <- get_stopwords()
+
+taylor_tidy_lover <- taylor_df_lover %>%
+  unnest_tokens(word, Lyrics)
+taylor_tidy_red <- taylor_df_red %>%
+  unnest_tokens(word, Lyrics)
+```
+
+```{r, message = F}
+taylor_pop_words_lover <- taylor_tidy_lover %>%
+  anti_join(stopwords) %>%
+  group_by(word) %>%
+  summarise(N=n()) %>%
+  arrange(desc(N)) %>%
+  slice(1:70)
+taylor_pop_words_red <- taylor_tidy_red %>%
+  anti_join(stopwords) %>%
+  group_by(word) %>%
+  summarise(N=n()) %>%
+  arrange(desc(N)) %>%
+  slice(1:70)
+```
+
+```{r, message = F}
+lover_wordcloud <- ggplot(taylor_pop_words_lover, aes(label= word, size = N)) +
+  geom_text_wordcloud() + 
+  scale_size_area(max_size=20) +
+  theme_minimal() +
+  labs(title = "Most Common Words Used", subtitle = "Lover Album", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29")
+lover_wordcloud
+red_wordcloud <- ggplot(taylor_pop_words_red, aes(label= word, size = N)) +
+  geom_text_wordcloud() + 
+  scale_size_area(max_size=20) +
+  theme_minimal() +
+  labs(title = "Most Common Words Used", subtitle = "Red Album", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29") 
+red_wordcloud
+```
+
+```{r, message = F}
+tidy_both <- bind_rows(taylor_tidy_lover,taylor_tidy_red ) %>%
+  anti_join(stopwords)
+word_sentiments <- get_sentiments("bing")
+
+taylor_pop_words <- tidy_both %>%
+  group_by(Album, word) %>%
+  summarise(N=n()) %>%
+  arrange(desc(N)) %>%
+  slice(1:70)
+
+sentiment_analysis <- tidy_both %>%
+  inner_join(word_sentiments, by = "word")
+
+sentiment_analysis_plot <- ggplot(sentiment_analysis) +
+  geom_bar(aes(x=Album, fill = sentiment)) + 
+  coord_cartesian(expand=F) +
+  theme_minimal() +
+  labs(title = "Number of Positive and Negative Words Used", subtitle  = "Taylor Swift's Lover and Red Album Sentiments", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29", y = "Number of Times Used", fill = "Sentiment")
+sentiment_analysis_plot
+```
+
+```{r, message = F}
+song_sentiment <- sentiment_analysis %>%
+  group_by(Album, Title, sentiment) %>%
+  summarise(N=n()) %>%
+  group_by(Album, Title) 
+
+```
+
+```{r, message = F}
+song_positive <- song_sentiment %>%
+  filter(sentiment == "positive") %>%
+  select(Album, Title, N) 
+
+song_negative <- song_sentiment %>%
+  filter(sentiment == "negative") %>%
+  select(Album, Title, N) 
+
+```
+
+```{r, message = F}
+positive_song_sentiment_plot <- ggplot(song_positive) +
+  geom_col(aes(x=N, y = reorder(Title, N), fill = Album)) +
+  theme_minimal() +
+  annotate(geom = "text", x = 38, y = 34, label = "Most positive songs", size = 3) +
+  scale_fill_manual(values = c("Lover" = "pink2",
+                               "Red"   = "red3" )) +
+  labs(title = "Positive Sentiment Per Song", subtitle = "Number of positive sentiment words for each song",  x = "Positive Word Count",  y = "Songs", fill = "Album", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29")
+positive_song_sentiment_plot
+
+```
+
+```{r, message = F, warning = F}
+album_sentiment_positive <- sentiment_analysis %>%
+  group_by(Album, sentiment) %>%
+  summarise(N=n()) %>%
+  filter(sentiment=="positive")
+
+album_sentiment_negative <-  sentiment_analysis %>%
+  group_by(Album, sentiment) %>%
+  summarise(N=n()) %>%
+  filter(sentiment=="negative")
+
+
+album_meta_positive <- album_sentiment_positive %>%
+  left_join(sales_data, by = c("Album" = "title"))
+
+album_meta_negative <- album_sentiment_negative %>%
+  left_join(sales_data, by = c("Album" = "title"))
+
+sentiment_meta <- sentiment_analysis %>%
+  left_join(sales_data, by = c("Album" = "title"))
+
+
+```
+
+```{r, message = F}
+sales_positive_plot <- ggplot(album_meta_positive) + 
+  geom_point(aes(x = sales, y = N, color = sentiment), size = 3) +
+  geom_point(data = album_meta_negative,aes(x=sales,y=N,color=sentiment),size=3) +
+  theme_minimal() +
+  labs(title = "Sentiment Word Count and Sales",subtitle = "Positive/Negative word count across Lover and Red ", x = "Sales ($)", y = "Positive Word Count", color = "Sentiment", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29")
+
+sales_positive_plot
+```
+
+```{r, message = F}
+country_sentiment_plot <- ggplot(sentiment_meta) +
+  geom_bar(aes(x = country, fill = sentiment)) +
+  coord_cartesian(expand = FALSE) +
+  theme_minimal() +
+  labs(title = "Positive and Negative Words by Country", subtitle = "Sentiment counts for Lover and Red by country", x = "Country", y = "Number of Words", fill = "Sentiment", caption = "Source: https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-09-29"
+  ) 
+country_sentiment_plot
+
+```
+
+
+```{r,fig.width=15,fig.height=15}
+my_dashboard2 <- (lover_wordcloud + red_wordcloud) / (sentiment_analysis_plot + country_sentiment_plot) / (sales_positive_plot + positive_song_sentiment_plot)
+my_dashboard2
+ggsave('my_dashboard2.png', width = 50, height = 50, units = 'cm')
+```
+
+## Interpretation
+
+Taylor Swift’s albums Lover and Red show clear differences in both word usage and overall sentiment. In Lover, the most common words are ones “love,” “baby,” “daylight,” and “want” show a more upbeat and relationship-focused theme. In contrast, Red still includes common words like “love” and “want,” but also leans more into emotional words like “trouble,” “back,” and “time,” suggesting different tone. Looking at the sentiment counts, Lover has noticeably more positive words overall than Red, while Red has a slightly higher share of negative words. This supports the idea that Lover is generally more optimistic, while Red may be more emotional. When looking at sentiment based on country, the pattern stays consistent. Generally countries have higher positive counts than negatives in songs. The relationship between sentiment and sales doesn’t show a strong pattern. Songs with higher sales don’t necessarily have more positive or negative words, which suggests that sentiment alone doesn’t drive commercial success. At the individual song level, there is a roughly equal mix of positive and negative words for the two albums with more negative being in red like before. Overall, the dashboard shows that Lover is more consistently positive and centered around lighter themes, while Red is slightly more negative.
+
+
+
+
+
+
